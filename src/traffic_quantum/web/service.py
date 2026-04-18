@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import json
+import os
+import shutil
 import subprocess
 
 from traffic_quantum.analysis.metrics import metrics_to_frame, summarize
@@ -616,6 +618,14 @@ class TrafficWebService:
 
 
     def _resolve_sumo_install(self) -> SumoInstall | None:
+        env_paths = self._resolve_sumo_from_env()
+        if env_paths is not None:
+            return env_paths
+
+        which_paths = self._resolve_sumo_from_path()
+        if which_paths is not None:
+            return which_paths
+
         for base in (Path(r"C:\Program Files\Eclipse\Sumo"), Path(r"C:\Program Files (x86)\Eclipse\Sumo")):
             sumo = base / "bin" / "sumo.exe"
             sumo_gui = base / "bin" / "sumo-gui.exe"
@@ -623,6 +633,68 @@ class TrafficWebService:
             random_trips = base / "tools" / "randomTrips.py"
             if all(path.exists() for path in (sumo, sumo_gui, netconvert, random_trips)):
                 return SumoInstall(sumo=sumo, sumo_gui=sumo_gui, netconvert=netconvert, random_trips=random_trips)
+        return None
+
+    def _resolve_sumo_from_env(self) -> SumoInstall | None:
+        sumo_home = os.environ.get("SUMO_HOME")
+        sumo_binary = os.environ.get("SUMO_BINARY")
+        sumo_gui_binary = os.environ.get("SUMO_GUI_BINARY")
+        netconvert_binary = os.environ.get("NETCONVERT_BINARY")
+        random_trips_py = os.environ.get("RANDOM_TRIPS_PY")
+
+        if sumo_home:
+            base = Path(sumo_home)
+            candidates = [
+                (
+                    base / "bin" / "sumo",
+                    base / "bin" / "sumo-gui",
+                    base / "bin" / "netconvert",
+                    base / "tools" / "randomTrips.py",
+                ),
+                (
+                    base / "bin" / "sumo.exe",
+                    base / "bin" / "sumo-gui.exe",
+                    base / "bin" / "netconvert.exe",
+                    base / "tools" / "randomTrips.py",
+                ),
+            ]
+            for sumo, sumo_gui, netconvert, random_trips in candidates:
+                if all(path.exists() for path in (sumo, sumo_gui, netconvert, random_trips)):
+                    return SumoInstall(sumo=sumo, sumo_gui=sumo_gui, netconvert=netconvert, random_trips=random_trips)
+
+        if sumo_binary and netconvert_binary:
+            sumo = Path(sumo_binary)
+            sumo_gui = Path(sumo_gui_binary) if sumo_gui_binary else sumo
+            netconvert = Path(netconvert_binary)
+            random_trips = Path(random_trips_py) if random_trips_py else self._guess_random_trips(sumo.parent.parent)
+            if random_trips is not None and all(path.exists() for path in (sumo, sumo_gui, netconvert, random_trips)):
+                return SumoInstall(sumo=sumo, sumo_gui=sumo_gui, netconvert=netconvert, random_trips=random_trips)
+        return None
+
+    def _resolve_sumo_from_path(self) -> SumoInstall | None:
+        sumo_binary = shutil.which("sumo") or shutil.which("sumo.exe")
+        netconvert_binary = shutil.which("netconvert") or shutil.which("netconvert.exe")
+        sumo_gui_binary = shutil.which("sumo-gui") or shutil.which("sumo-gui.exe") or sumo_binary
+        if not sumo_binary or not netconvert_binary:
+            return None
+
+        sumo = Path(sumo_binary)
+        sumo_gui = Path(sumo_gui_binary)
+        netconvert = Path(netconvert_binary)
+        random_trips = self._guess_random_trips(sumo.parent.parent)
+        if random_trips is None:
+            return None
+        return SumoInstall(sumo=sumo, sumo_gui=sumo_gui, netconvert=netconvert, random_trips=random_trips)
+
+    def _guess_random_trips(self, base: Path) -> Path | None:
+        candidates = [
+            base / "tools" / "randomTrips.py",
+            Path("/usr/share/sumo/tools/randomTrips.py"),
+            Path("/usr/local/share/sumo/tools/randomTrips.py"),
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
         return None
 
     def _require_sumo(self) -> SumoInstall:

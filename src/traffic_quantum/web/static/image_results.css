@@ -264,6 +264,68 @@ svg {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.page-footer {
+  margin-top: 22px;
+  padding: 10px 22px 32px;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+}
+
+.page-footer p {
+  margin: 0;
+  padding: 12px 20px;
+  border-radius: 999px;
+  color: #f6efe5;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background:
+    linear-gradient(135deg, rgba(16, 29, 27, 0.96), rgba(23, 49, 55, 0.94) 52%, rgba(120, 57, 27, 0.92));
+  border: 1px solid rgba(255, 214, 170, 0.2);
+  box-shadow:
+    0 10px 24px rgba(23, 21, 18, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+  animation: footerGlow 3.8s ease-in-out infinite;
+}
+
+.page-footer p::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 214, 170, 0.06) 45%, rgba(255, 255, 255, 0.14) 50%, transparent 68%);
+  transform: translateX(-120%);
+  animation: footerSweep 4.8s ease-in-out infinite;
+}
+
+@keyframes footerGlow {
+  0%, 100% {
+    box-shadow:
+      0 10px 24px rgba(23, 21, 18, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow:
+      0 14px 30px rgba(23, 21, 18, 0.24),
+      0 0 0 1px rgba(255, 196, 128, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes footerSweep {
+  0%,
+  55%,
+  100% {
+    transform: translateX(-120%);
+  }
+  75% {
+    transform: translateX(120%);
+  }
+}
+
 .chart-empty {
   display: grid;
   place-items: center;

@@ -299,14 +299,16 @@ class TrafficWebService:
         return target
 
     def launch_gui(self, run_id: str) -> dict:
+        sumo = self._require_sumo()
         run_dir = self.runs_dir / run_id
         scenario = self._read_json(run_dir / "scenario.json")
-        subprocess.Popen([str(self.sumo.sumo_gui), "-c", scenario["sumocfg_path"]], cwd=run_dir)
+        subprocess.Popen([str(sumo.sumo_gui), "-c", scenario["sumocfg_path"]], cwd=run_dir)
         return {"status": "started", "message": "SUMO GUI launched."}
 
     def launch_image_demo_gui(self) -> dict:
+        sumo = self._require_sumo()
         assets = self._ensure_image_demo_assets()
-        subprocess.Popen([str(self.sumo.sumo_gui), "-c", str(assets["sumocfg"])], cwd=self.root)
+        subprocess.Popen([str(sumo.sumo_gui), "-c", str(assets["sumocfg"])], cwd=self.root)
         return {"status": "started", "message": "Image-demo SUMO GUI launched."}
 
     def _run_controller(
@@ -318,6 +320,7 @@ class TrafficWebService:
         capture_trace: bool,
         use_gui: bool,
     ) -> dict:
+        sumo = self._require_sumo()
         config = load_config(self.root / "configs" / "sumo_city.toml")
         config.simulation.backend = "sumo"
         config.simulation.episode_seconds = episode_seconds
@@ -325,7 +328,7 @@ class TrafficWebService:
         config.controller.name = controller_name
         config.controller.phase_actions = ["ns_green", "ew_green"]
         config.sumo.sumocfg_path = str(sumocfg_path)
-        config.sumo.sumo_binary = str(self.sumo.sumo_gui if use_gui else self.sumo.sumo)
+        config.sumo.sumo_binary = str(sumo.sumo_gui if use_gui else sumo.sumo)
         config.sumo.use_gui = use_gui
         return self._run_config_controller(config, controller_name, capture_trace, run_id)
 
@@ -463,20 +466,22 @@ class TrafficWebService:
         }
 
     def _image_demo_config(self, controller_name: str, episode_seconds: int, use_gui: bool = False):
+        sumo = self._require_sumo()
         config = load_config(self.root / "configs" / "image_interchange.toml")
         config.controller.name = controller_name
         config.simulation.backend = "sumo"
         config.simulation.episode_seconds = episode_seconds
-        config.sumo.sumo_binary = str(self.sumo.sumo_gui if use_gui else self.sumo.sumo)
+        config.sumo.sumo_binary = str(sumo.sumo_gui if use_gui else sumo.sumo)
         config.sumo.use_gui = use_gui
         config.sumo.sumocfg_path = str((self.root / "generated_image_demo" / "image_interchange.sumocfg").resolve())
         return config
 
     def _ensure_image_demo_assets(self) -> dict[str, Path]:
+        sumo = self._require_sumo()
         output_dir = self.root / "generated_image_demo"
         config = load_config(self.root / "configs" / "image_interchange.toml")
         assets = generate_image_interchange_assets(config, output_dir)
-        build_netconvert(assets, netconvert_binary=str(self.sumo.netconvert))
+        build_netconvert(assets, netconvert_binary=str(sumo.netconvert))
         return assets
 
     def _trace_series(self, trace: dict | None) -> list[dict]:
@@ -521,6 +526,7 @@ class TrafficWebService:
         return {"junctions": junctions}
 
     def _scalability_study(self) -> list[dict]:
+        sumo = self._require_sumo()
         study_dir = self.root / "reports" / "image_dashboard" / "scalability_assets"
         study_dir.mkdir(parents=True, exist_ok=True)
         results = []
@@ -535,12 +541,12 @@ class TrafficWebService:
             config.simulation.warmup_seconds = 15
             config.controller.phase_actions = ["ns_green", "ew_green"]
             assets = generate_grid_assets(config, assets_dir)
-            build_netconvert(assets, netconvert_binary=str(self.sumo.netconvert))
+            build_netconvert(assets, netconvert_binary=str(sumo.netconvert))
             for controller_name in ("fixed", "hybrid"):
                 trial_config = deepcopy(config)
                 trial_config.controller.name = controller_name
                 trial_config.sumo.sumocfg_path = str(assets["sumocfg"])
-                trial_config.sumo.sumo_binary = str(self.sumo.sumo)
+                trial_config.sumo.sumo_binary = str(sumo.sumo)
                 trial_config.sumo.use_gui = False
                 result = self._run_config_controller(
                     trial_config,
@@ -560,15 +566,17 @@ class TrafficWebService:
         return results
 
     def _build_area_network(self, run_dir: Path, bbox: dict[str, float]) -> tuple[Path, Path, Path, dict]:
+        sumo = self._require_sumo()
         config = load_config(self.root / "configs" / "sumo_city.toml")
         assets = generate_area_based_assets(config, run_dir, bbox)
-        build_netconvert(assets, netconvert_binary=str(self.sumo.netconvert))
+        build_netconvert(assets, netconvert_binary=str(sumo.netconvert))
         return assets["sumocfg"], assets["net"], assets["rou"], assets["layout"]
 
     def _build_scanned_area_network(self, run_dir: Path, warm_layout) -> tuple[Path, Path, Path, dict]:
+        sumo = self._require_sumo()
         config = load_config(self.root / "configs" / "sumo_city.toml")
         assets = generate_scanned_major_road_assets(config, run_dir, warm_layout)
-        build_netconvert(assets, netconvert_binary=str(self.sumo.netconvert))
+        build_netconvert(assets, netconvert_binary=str(sumo.netconvert))
         return assets["sumocfg"], assets["net"], assets["rou"], assets["layout"]
 
     def _network_preview(self, net_path: Path) -> dict:
@@ -607,7 +615,7 @@ class TrafficWebService:
         }
 
 
-    def _resolve_sumo_install(self) -> SumoInstall:
+    def _resolve_sumo_install(self) -> SumoInstall | None:
         for base in (Path(r"C:\Program Files\Eclipse\Sumo"), Path(r"C:\Program Files (x86)\Eclipse\Sumo")):
             sumo = base / "bin" / "sumo.exe"
             sumo_gui = base / "bin" / "sumo-gui.exe"
@@ -615,7 +623,15 @@ class TrafficWebService:
             random_trips = base / "tools" / "randomTrips.py"
             if all(path.exists() for path in (sumo, sumo_gui, netconvert, random_trips)):
                 return SumoInstall(sumo=sumo, sumo_gui=sumo_gui, netconvert=netconvert, random_trips=random_trips)
-        raise RuntimeError("SUMO installation not found.")
+        return None
+
+    def _require_sumo(self) -> SumoInstall:
+        if self.sumo is None:
+            raise RuntimeError(
+                "SUMO installation not found. The dashboard can still load, but simulation, asset generation, "
+                "and GUI actions require SUMO to be installed on the server."
+            )
+        return self.sumo
 
     def _bbox_from_polygon(self, polygon: list[dict[str, float]]) -> dict[str, float]:
         lats = [point["lat"] for point in polygon]
